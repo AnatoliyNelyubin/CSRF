@@ -13,6 +13,9 @@ app = Flask(__name__)
 # All major frameworks enforce CSRF-protection in forms by default, in all POST views.
 app.config['WTF_CSRF_ENABLED'] = False
 
+secret_code_varaiable = str(uuid.uuid4())
+# the secret_code_varaiable is used for keeping a secret UUID code in the session so that
+# it would be possible to check whether this coookine is sent from a user's session or from an evil's session
 
 @app.route('/', methods=['GET'])
 def main():
@@ -21,13 +24,14 @@ def main():
 
 @app.route('/account', methods=['GET'])
 def account():
+    global secret_code_varaiable
     with Database() as db:
         db.execute("select amount from accounts where username = 'user1'")
         data = db.fetchone()
     resp = make_response(render_template('account.html', current_account=data[0]))
     secret_token = request.cookies.get('secret')
-    if secret_token is None:
-        resp.set_cookie('secret', str(uuid.uuid4()))
+    if secret_token is None or secret_token != secret_code_varaiable:
+        resp.set_cookie('secret', secret_code_varaiable)
     return resp
 
 
@@ -36,10 +40,15 @@ def withdraw():
     username = request.form.get("username")
     password = request.form.get("password")
     secret = request.cookies.get("secret")
-    
-    print(username, password, secret)
-    
+    global secret_code_varaiable
+    referrer = request.headers.get("Referer")
+    if referrer != "http://127.0.0.1:5000/account":
+        return redirect(url_for('account'))
+
     if username != 'user1' or password != 'password' or not secret:
+        return redirect(url_for('account'))
+
+    if secret != secret_code_varaiable:
         return redirect(url_for('account'))
 
     with Database() as db:
