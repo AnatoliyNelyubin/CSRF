@@ -7,15 +7,15 @@ try:
 except (ImportError, SystemError):
     from models import init_dataset, Database
 
+secret_code_variable = str(uuid.uuid4())
 
 app = Flask(__name__)
 # Disable Flask's default protection
 # All major frameworks enforce CSRF-protection in forms by default, in all POST views.
 app.config['WTF_CSRF_ENABLED'] = False
 
-secret_code_varaiable = str(uuid.uuid4())
 # the secret_code_varaiable is used for keeping a secret UUID code in the session so that
-# it would be possible to check whether this coookine is sent from a user's session or from an evil's session
+# it would be possible to check whether this cookie is sent from a user's session or from an evil's session
 
 @app.route('/', methods=['GET'])
 def main():
@@ -24,31 +24,29 @@ def main():
 
 @app.route('/account', methods=['GET'])
 def account():
-    global secret_code_varaiable
+    global secret_code_variable
     with Database() as db:
         db.execute("select amount from accounts where username = 'user1'")
         data = db.fetchone()
-    resp = make_response(render_template('account.html', current_account=data[0]))
-    secret_token = request.cookies.get('secret')
-    if secret_token is None or secret_token != secret_code_varaiable:
-        resp.set_cookie('secret', secret_code_varaiable)
+    resp = make_response(render_template('account.html', current_account=data[0], csrf_token=secret_code_variable))
     return resp
 
 
 @app.route('/withdraw', methods=['POST'])
 def withdraw():
-    username = request.form.get("username")
-    password = request.form.get("password")
-    secret = request.cookies.get("secret")
-    global secret_code_varaiable
-    referrer = request.headers.get("Referer")
-    if referrer != "http://127.0.0.1:5000/account":
-        return redirect(url_for('account'))
+    html_escape_table = {
+    "&": "&amp;",
+    '"': "&quot;",
+    "'": "&apos;",
+    ">": "&gt;",
+    "<": "&lt;",
+    }
+    username = "".join([html_escape_table.get(x,x) for x in request.form.get("username")])
+    password = "".join([html_escape_table.get(x,x) for x in request.form.get("password")])
+    csrf_token = request.form.get("csrf_token")
+    global secret_code_variable
 
-    if username != 'user1' or password != 'password' or not secret:
-        return redirect(url_for('account'))
-
-    if secret != secret_code_varaiable:
+    if username != 'user1' or password != 'password' or not csrf_token:
         return redirect(url_for('account'))
 
     with Database() as db:
